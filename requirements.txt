@@ -49,3 +49,5 @@ traitlets==5.15.1
 typing_extensions==4.15.0
 urllib3==2.7.0
 wcwidth==0.8.1
+scipy==1.16.0
+seaborn==0.13.2
