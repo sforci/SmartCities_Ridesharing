@@ -1,0 +1,128 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Lab report — Smart Cities RideSharing (Chicago)
+% Template: rho-class v3 (Memo Jimenez, CC BY 4.0)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\documentclass[9pt,a4paper,twocolumn,twoside]{rho-class/rho}
+\usepackage[english]{babel}
+
+\doctype{Lab Report}
+\title{Decoding the Intersection between Ridesourcing Dependency and Socio-Health Vulnerability in Chicago}
+
+\author[{\textasteriskcentered},a,1]{Francesca Negri}
+\author[{\textdagger},a,2]{Lab Partner}
+
+\affil[a]{Data Science Lab on Smart Cities, University of Milan-Bicocca}
+
+\dates{Compiled on \today}
+
+\corres{\textsuperscript{\textasteriskcentered}Corresponding author: \href{mailto:francesca.negri@studenti.unimib.it}{francesca.negri@studenti.unimib.it}.}
+\corres{\textsuperscript{\textdagger}Equal contribution.}
+
+\docinfo{Analysis at Community Area level (77 CA, O'Hare excluded from socioeconomic modeling). Notebook: \texttt{SmartCities\_RideSharing.ipynb}.}
+
+\journalname{DSLSC}
+\journal{Smart Cities RideSharing}
+\theday{\today}
+\vol{1}
+\no{1}
+
+\begin{abstract}
+    This report investigates spatial inequity in ridesourcing (Uber/Lyft) usage relative to public health and socioeconomic vulnerability across Chicago's 77 Community Areas. We construct a Transport Usage Index (TUI) from Transportation Network Provider (TNP) trip data (2018--2024) and a composite Health \& Socioeconomic Vulnerability Index (HSVI) from the Chicago Hardship Index and the COVID-19 Community Vulnerability Index (CCVI). Bivariate correlation analysis and side-by-side choropleth maps are used to test whether highly vulnerable areas depend more on ridesourcing.
+\end{abstract}
+
+\keywords{Ridesourcing, Smart Cities, Spatial Inequity, Chicago, Community Areas, Vulnerability Index}
+
+\begin{document}
+
+    \maketitle
+    \thispagestyle{firststyle}
+
+\section{Introduction}
+
+    \rhostart{R}idesourcing platforms have reshaped urban mobility in large U.S. cities. In Chicago, uneven access to public transport and varying socioeconomic conditions raise a central policy question: does ridesourcing act as a mobility equalizer or as a costly substitute where transit is inadequate?
+
+    We address this at the spatial scale of Chicago's 77 Community Areas (CA), comparing TNP usage intensity with composite vulnerability scores.
+
+\section{Data Sources}
+
+    \begin{itemize}
+        \item \textbf{TNP trips} (Chicago Data Portal): monthly pickup counts by Community Area, 2018--2024.
+        \item \textbf{Population} (CMAP Community Data Snapshots): resident population by CA and year.
+        \item \textbf{Community Area boundaries} (Chicago Data Portal).
+        \item \textbf{Hardship Index} \cite{chicago_hardship}: socioeconomic indicators by neighborhood.
+        \item \textbf{CCVI} \cite{chicago_ccvi}: Chicago COVID-19 Community Vulnerability Index.
+    \end{itemize}
+
+    Community Area 76 (O'Hare Airport) is excluded from socioeconomic modeling as a transport hub outlier.
+
+\section{Methods}
+
+    \subsection{Transport Usage Index (TUI)}
+
+        TUI measures ridesourcing intensity per resident in Community Area $i$ during period $m$:
+        \begin{equation}\label{eq:tui}
+            TUI_{i,m} = \frac{\text{TNP pickups}_{i,m}}{\text{population}_{i,m}} \times 1000
+        \end{equation}
+
+    \subsection{Health \& Socioeconomic Vulnerability Index (HSVI)}
+
+        HSVI combines standardized Hardship Index and CCVI scores:
+        \begin{equation}\label{eq:hsvi}
+            HSVI_i = \frac{z(\text{Hardship}_i) + z(\text{CCVI}_i)}{2}
+        \end{equation}
+        Higher values indicate greater vulnerability.
+
+    \subsection{Correlation Analysis}
+
+        We compute Pearson (linear) and Spearman (rank-based) correlations between annual mean TUI and HSVI across CAs. Significance is assessed at $\alpha = 0.05$; results are exploratory and do not imply causality.
+
+\section{Results}
+
+    \tabref{tab:indicators} summarizes the indicators computed in the notebook.
+
+    \begin{table}[H]
+        \caption{Indicators by Community Area}
+        \label{tab:indicators}
+        \begin{tabular}{
+            >{\raggedright\arraybackslash}p{0.22\columnwidth}
+            >{\raggedright\arraybackslash}p{0.62\columnwidth}
+        }
+        \toprule
+        \textbf{Indicator} & \textbf{Description} \\
+        \midrule
+        TUI & TNP trips per 1{,}000 residents \\
+        Hardship Index & Socioeconomic hardship score (1--100) \\
+        CCVI & Health/epidemiological vulnerability score \\
+        HSVI & Composite z-score mean of Hardship and CCVI \\
+        \bottomrule
+        \end{tabular}
+        \tabletext{Insert correlation coefficients and map figures exported from the notebook.}
+    \end{table}
+
+    \begin{note}
+        Export choropleth maps (TUI vs HSVI) and the scatter plot from the notebook and include them here as \texttt{figures/tui\_map.pdf} and \texttt{figures/hsvi\_map.pdf}.
+    \end{note}
+
+\section{Discussion}
+
+    Interpret correlation signs in light of the research question. A positive association supports the \textit{substitute mobility} hypothesis; a negative one suggests concentration of ridesourcing in less vulnerable or central commercial areas. Spatial autocorrelation and land-use mix remain important confounders for future work.
+
+\section{Code}
+
+    Analysis is implemented in \texttt{SmartCities\_RideSharing.ipynb}. Helper functions live in \texttt{utils.py}.
+
+    \begin{code}
+        \lstinputlisting[language=python]{example.py}
+        \label{lst:utils}
+        \caption{Example Python utility (template). Replace with exported notebook snippets.}
+    \end{code}
+
+\section*{Acknowledgments}
+\addcontentsline{toc}{section}{Acknowledgments}
+
+    Course: Data Science Lab on Smart Cities, University of Milan-Bicocca.
+
+\printbibliography
+
+\end{document}
