@@ -1,22 +1,22 @@
 # Smart Cities RideSharing — Chicago
 
-Repository per il corso **Data Science Lab on Smart Cities** (Università Milano-Bicocca).
+Repository for the **Data Science Lab on Smart Cities** course (University of Milan-Bicocca).
 
-Analisi dell'inequità spaziale tra uso di ridesourcing (Uber/Lyft) e vulnerabilità socio-sanitaria nelle 77 Community Areas di Chicago.
+Spatial inequity analysis between ridesourcing (Uber/Lyft) usage and socio-demographic vulnerability across Chicago's 77 Community Areas.
 
 ## Research question
 
-Il ridesourcing agisce come equalizzatore della mobilità o come sostituto costoso del trasporto pubblico nelle aree vulnerabili?
+Does ridesourcing act as a mobility equalizer or as a costly substitute for public transport in vulnerable areas?
 
-## Struttura del progetto
+## Project structure
 
 ```
 SmartCities_Ridesharing/
-├── SmartCities_RideSharing.ipynb   # analisi principale
-├── utils.py                        # download TNP e caricamento popolazione
+├── SmartCities_RideSharing.ipynb   # main analysis
+├── utils.py                        # TNP download and population loading
 ├── requirements.txt
-├── data/                           # dati locali (geojson, CSV)
-└── ridesharing_report/             # report LaTeX (rho-class)
+├── data/                           # local data (geojson, CSV)
+└── ridesharing_report/             # LaTeX report (rho-class)
 ```
 
 ## Setup
@@ -30,16 +30,17 @@ pip install -r requirements.txt
 jupyter notebook SmartCities_RideSharing.ipynb
 ```
 
-## Indicatori
+## Indicators
 
-| Indicatore | Descrizione |
+| Indicator | Description |
 |---|---|
-| **TUI** | Transport Usage Index: trip TNP per 1.000 residenti |
-| **Hardship Index** | Vulnerabilità socioeconomica (Chicago Data Portal) |
-| **CCVI** | Chicago COVID-19 Community Vulnerability Index |
-| **HSVI** | Indice composito (z-score medio Hardship + CCVI) |
+| **TUI** | Transport Usage Index: TNP trips per 1,000 residents |
+| **Hardship Index** | Composite socioeconomic hardship score (Chicago Data Portal) |
+| **Per capita income** | Per capita income by Community Area |
+| **SDVI** | Socio-demographic vulnerability index (mean z-score of Hardship + income disadvantage) |
+| **CCVI** | Auxiliary health vulnerability index (not included in SDVI) |
 
-La Community Area 76 (O'Hare) è esclusa dal modeling socioeconomico.
+Community Area 76 (O'Hare) is excluded from socio-demographic modeling.
 
 ## Data sources
 
@@ -48,18 +49,18 @@ La Community Area 76 (O'Hare) è esclusa dal modeling socioeconomico.
 - [Community Area boundaries](https://data.cityofchicago.org/Facilities-Geographic-Boundaries/Boundaries-Community-Areas-Map/cauq-8yn6)
 - [Hardship Index](https://data.cityofchicago.org/Health-Human-Services/Selected-socioeconomic-indicators-by-neighborhood/i9hv-en6g)
 - [CCVI](https://data.cityofchicago.org/Health-Human-Services/Chicago-COVID-19-Community-Vulnerability-Index-CCV/xhc6-88s9)
-- CMAP Community Data Snapshots (popolazione per CA)
+- CMAP Community Data Snapshots (population by CA)
 
-I dati TNP possono essere riscaricati via API dal notebook (`utils.source_tnp_counts`). I CSV di vulnerabilità sono in `data/`.
+TNP data can be re-downloaded via API from the notebook (`utils.source_tnp_counts`). Vulnerability CSVs are in `data/`.
 
-## Branch
+## Branches
 
-- `main` — notebook base (TUI)
-- `fn-health` — integrazione HSVI, correlazioni, mappe bivariate e report LaTeX
+- `main` — base notebook (TUI)
+- `fn-health` — SDVI integration (Hardship + income), correlations, bivariate maps, and LaTeX report
 
 ## Report
 
-Vedi [`ridesharing_report/README.md`](ridesharing_report/README.md) per compilare il PDF.
+See [`ridesharing_report/README.md`](ridesharing_report/README.md) for PDF compilation instructions.
 
 ```bash
 cd ridesharing_report && make pdf
@@ -68,4 +69,4 @@ cd ridesharing_report && make pdf
 ## Team
 
 - Francesca Negri (`fn-health`)
-- [sforci](https://github.com/sforci) — repository originale
+- Silvia Forcina Barrero — [sforci](https://github.com/sforci), original repository
