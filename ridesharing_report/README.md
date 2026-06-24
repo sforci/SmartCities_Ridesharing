@@ -35,8 +35,13 @@ Il PDF generato è `main.pdf`.
 2. Imposta il compiler su **pdfLaTeX**.
 3. Compila: Overleaf gestisce automaticamente `biber`.
 
+## Figures
+
+Run the notebook first so charts are saved under `data/output_charts/`. The report loads them via `\graphicspath{{../data/output_charts/}}`.
+
+Required files: `tui_2024.png`, `tui_sdvi_maps_2024.png`, `tui_vs_hsvi_2024.png`, `tui_vs_sdvi_2024.png`.
+
 ## Note
 
-- Il template usa `listings` (non `minted`): nessun Python/Pygments o `--shell-escape` richiesto.
-- Aggiungi le figure esportate dal notebook in `figures/` e referenziale in `main.tex`.
-- Aggiorna autori e email in `main.tex` prima della consegna.
+- Figures are read from `../data/output_charts/` after running the notebook.
+- The template uses `listings` (not `minted`): no Python/Pygments or `--shell-escape` required.
