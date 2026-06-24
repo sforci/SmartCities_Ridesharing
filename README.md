@@ -68,5 +68,6 @@ cd ridesharing_report && make pdf
 
 ## Team
 
-- Francesca Negri (`fn-health`)
-- Silvia Forcina Barrero — [sforci](https://github.com/sforci), original repository
+
+- Silvia Forcina Barrero — [sforci](https://github.com/sforci)
+- Francesca Negri — [FrancescaNegriUNiMiB](https://github.com/FrancescaNegriUNiMiB)
