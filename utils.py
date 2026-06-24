@@ -1,13 +1,11 @@
 # helper functions
 
 import json
-import os
 import re
 from pathlib import Path
 
 import geopandas as gpd
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 import requests
 import seaborn as sns
@@ -34,10 +32,16 @@ CCVI_RENAME = {
 }
 
 
-def source_tnp_counts(url, df_name):
-    '''Download monthly TNP pickup counts by community area from Chicago Data Portal.
-    Input: Socrata API URL, CSV filename. Output: CSV saved under data/.
+def source_tnp_counts(url, df_name, data_dir="data", force=False):
     '''
+    Download or reuse monthly TNP counts by community area.
+    Input: API url, output name. Output: CSV path under data/.
+    '''
+    out_path = Path(data_dir) / f"{df_name}.csv"
+    if out_path.exists() and not force:
+        print(f"Using cached TNP data: {out_path}")
+        return out_path
+
     query = """
     SELECT
     date_trunc_ym(trip_start_timestamp) AS month,
@@ -59,12 +63,16 @@ def source_tnp_counts(url, df_name):
     tnp_counts["month"] = pd.to_datetime(tnp_counts["month"])
     tnp_counts["pickup_community_area"] = tnp_counts["pickup_community_area"].astype(int)
     tnp_counts["n_trips"] = tnp_counts["n_trips"].astype(int)
-    tnp_counts.to_csv(os.path.join("data", f"{df_name}.csv"), index=False)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    tnp_counts.to_csv(out_path, index=False)
+    print(f"Downloaded TNP data: {out_path}")
+    return out_path
 
 
 def load_cca_population_file(filepath: str | Path, name_to_id: dict | None = None) -> pd.DataFrame:
-    '''Load population from a CCA geojson file.
-    Input: file path, name-to-id lookup. Output: DataFrame with community_area, population, year.
+    '''
+    Load population from one CCA geojson file.
+    Input: file path, optional name lookup. Output: community_area, population, year.
     '''
     filepath = Path(filepath)
     year = int(re.search(r"(\d{4})", filepath.stem).group(1))
@@ -89,8 +97,9 @@ def load_cca_population_file(filepath: str | Path, name_to_id: dict | None = Non
 
 
 def load_all_cca_population(population_folder: str | Path) -> pd.DataFrame:
-    '''Load population from all CCA_*.geojson files in a folder.
-    Input: data folder. Output: DataFrame with community_area, year, population.
+    '''
+    Load population from all CCA_*.geojson files in a folder.
+    Input: data folder. Output: community_area, year, population.
     '''
     population_folder = Path(population_folder)
     files = sorted(population_folder.glob("CCA_*.geojson"))
@@ -113,18 +122,10 @@ def load_all_cca_population(population_folder: str | Path) -> pd.DataFrame:
     )
 
 
-def compute_tui_index(df: pd.DataFrame) -> pd.DataFrame:
-    '''Compute TUI as trips per 1,000 residents.
-    Input: DataFrame with n_trips and population. Output: same DataFrame with tui_index column.
-    '''
-    out = df.copy()
-    out["tui_index"] = (out["n_trips"] / out["population"]) * 1000
-    return out
-
-
 def load_chicago_community_areas(filepath: str | Path) -> gpd.GeoDataFrame:
-    '''Load Chicago Community Area boundaries.
-    Input: geojson path. Output: GeoDataFrame with community_area and community_area_name.
+    '''
+    Load Chicago community area boundaries.
+    Input: geojson path. Output: GeoDataFrame with community_area and name.
     '''
     gdf = gpd.read_file(filepath)
     gdf = gdf.rename(columns={"area_num_1": "community_area", "community": "community_area_name"})
@@ -132,32 +133,27 @@ def load_chicago_community_areas(filepath: str | Path) -> gpd.GeoDataFrame:
     return gdf
 
 
-def aggregate_tui_by_year(tui: pd.DataFrame, year: int) -> pd.DataFrame:
-    '''Average TUI by community area for a given year.
-    Input: monthly TUI DataFrame, year. Output: annual mean per community_area.
-    '''
-    return (
-        tui[tui["year"] == year]
-        .groupby("community_area", as_index=False)["tui_index"]
-        .mean()
-    )
-
-
 def build_tui_map(
     community_areas: gpd.GeoDataFrame,
     tui: pd.DataFrame,
     year: int,
 ) -> gpd.GeoDataFrame:
-    '''Merge boundaries and annual TUI for choropleth maps.
-    Input: CA boundaries, monthly TUI, year. Output: GeoDataFrame ready to plot.
     '''
-    tui_year = aggregate_tui_by_year(tui, year)
+    Merge boundaries with mean annual TUI for one year.
+    Input: boundaries, monthly TUI, year. Output: GeoDataFrame for mapping.
+    '''
+    tui_year = (
+        tui[tui["year"] == year]
+        .groupby("community_area", as_index=False)["tui_index"]
+        .mean()
+    )
     return community_areas.merge(tui_year, on="community_area", how="left")
 
 
 def load_vulnerability_data(data_dir: str | Path = "data") -> pd.DataFrame:
-    '''Load Hardship Index, per capita income, and CCVI; compute SDVI.
-    Input: folder with hardship_index.csv and ccvi.csv. Output: DataFrame per community_area.
+    '''
+    Load hardship, income, CCVI and compute HSVI and SDVI.
+    Input: data folder. Output: vulnerability table per community_area.
     '''
     data_dir = Path(data_dir)
     hardship = pd.read_csv(data_dir / "hardship_index.csv").rename(columns=HARDHIP_RENAME)
@@ -165,6 +161,10 @@ def load_vulnerability_data(data_dir: str | Path = "data") -> pd.DataFrame:
 
     hardship["community_area"] = pd.to_numeric(hardship["community_area"], errors="coerce")
     ccvi["community_area"] = pd.to_numeric(ccvi["community_area"], errors="coerce")
+    hardship = hardship.dropna(subset=["community_area"]).copy()
+    hardship["community_area"] = hardship["community_area"].astype(int)
+    ccvi = ccvi.dropna(subset=["community_area"]).copy()
+    ccvi["community_area"] = ccvi["community_area"].astype(int)
     hardship["hardship_index"] = pd.to_numeric(hardship["hardship_index"], errors="coerce")
     hardship["per_capita_income"] = pd.to_numeric(hardship["per_capita_income"], errors="coerce")
     ccvi["ccvi_score"] = pd.to_numeric(ccvi["ccvi_score"], errors="coerce")
@@ -180,8 +180,9 @@ def load_vulnerability_data(data_dir: str | Path = "data") -> pd.DataFrame:
     )
 
     vulnerability["income_vuln"] = -vulnerability["per_capita_income"]
-    for col in ["hardship_index", "income_vuln"]:
+    for col in ["hardship_index", "income_vuln", "ccvi_score"]:
         vulnerability[f"{col}_z"] = (vulnerability[col] - vulnerability[col].mean()) / vulnerability[col].std()
+    vulnerability["hsvi"] = vulnerability[["hardship_index_z", "ccvi_score_z"]].mean(axis=1)
     vulnerability["sdvi"] = vulnerability[["hardship_index_z", "income_vuln_z"]].mean(axis=1)
     return vulnerability
 
@@ -191,12 +192,13 @@ def build_analysis_gdf(
     vulnerability: pd.DataFrame,
     exclude_ca: int = OHARE_CA,
 ) -> gpd.GeoDataFrame:
-    '''Merge TUI and vulnerability data, exclude O'Hare and incomplete rows.
-    Input: TUI map, vulnerability table. Output: GeoDataFrame for analysis.
+    '''
+    Merge TUI and vulnerability; drop O'Hare and incomplete rows.
+    Input: TUI map, vulnerability table. Output: analysis GeoDataFrame.
     '''
     gdf = tui_map.merge(vulnerability, on="community_area", how="left")
     gdf = gdf[gdf["community_area"] != exclude_ca].copy()
-    return gdf.dropna(subset=["tui_index", "sdvi"])
+    return gdf.dropna(subset=["tui_index", "hsvi", "sdvi"])
 
 
 def compute_tui_correlations(
@@ -204,23 +206,18 @@ def compute_tui_correlations(
     tui_col: str = "tui_index",
     vuln_cols: list[str] | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    '''Compute Pearson, Spearman, and pairwise tests between TUI and vulnerability indicators.
-    Input: analysis GeoDataFrame. Output: Pearson/Spearman matrices and test table.
+    '''
+    Compute Pearson, Spearman and pairwise tests for TUI vs vulnerability cols.
+    Input: analysis GeoDataFrame. Output: correlation matrices and test table.
     '''
     if vuln_cols is None:
-        vuln_cols = ["hardship_index", "per_capita_income", "sdvi"]
+        vuln_cols = ["hsvi", "sdvi", "ccvi_score"]
 
     cols = [tui_col, *vuln_cols]
-    corr_data = gdf[cols]
-    pearson = corr_data.corr(method="pearson")
-    spearman = corr_data.corr(method="spearman")
+    pearson = gdf[cols].corr(method="pearson")
+    spearman = gdf[cols].corr(method="spearman")
 
-    labels = {
-        "sdvi": "SDVI",
-        "hardship_index": "Hardship Index",
-        "per_capita_income": "Per capita income",
-        "ccvi_score": "CCVI",
-    }
+    labels = {"hsvi": "HSVI", "sdvi": "SDVI", "ccvi_score": "CCVI"}
     tests = []
     for col in vuln_cols:
         r_p, p_p = stats.pearsonr(gdf[tui_col], gdf[col])
@@ -236,8 +233,24 @@ def compute_tui_correlations(
     return pearson, spearman, pd.DataFrame(tests)
 
 
+def save_chart(chart, filename, output_dir="data/output_charts"):
+    '''
+    Save a matplotlib chart as PNG under data/output_charts.
+    Input: figure or axes, output filename. Output: saved file path.
+    '''
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    fig = chart if hasattr(chart, "savefig") else chart.get_figure()
+    name = filename if filename.endswith(".png") else f"{filename}.png"
+    out_path = output_dir / name
+    fig.savefig(out_path, dpi=300, bbox_inches="tight")
+    return out_path
+
+
 def plot_tui_index(map_df, year, add_labels=True, ax=None):
-    '''Choropleth map of TUI by community area.
+    '''
+    Choropleth of TUI by community area.
     Input: GeoDataFrame with tui_index, year. Output: matplotlib axes.
     '''
     if ax is None:
@@ -271,16 +284,18 @@ def plot_tui_index(map_df, year, add_labels=True, ax=None):
     return ax
 
 
-def plot_tui_vulnerability_scatter(
-    gdf: pd.DataFrame,
-    x: str = "sdvi",
-    y: str = "tui_index",
-    year: int = 2024,
-    ax=None,
-):
-    '''Scatter plot of TUI vs SDVI with linear regression.
-    Input: analysis GeoDataFrame. Output: matplotlib axes.
+def plot_tui_vulnerability_scatter(gdf, x="sdvi", y="tui_index", year=2024, ax=None):
     '''
+    Scatter of TUI vs vulnerability index with linear fit.
+    Input: analysis GeoDataFrame, x column. Output: matplotlib axes.
+    '''
+    scatter_labels = {
+        "ccvi_score": ("CCVI", "TUI vs CCVI"),
+        "hsvi": ("HSVI (z Hardship + CCVI)", "TUI vs HSVI"),
+        "sdvi": ("SDVI (z Hardship + income)", "TUI vs SDVI"),
+    }
+    xlabel, title = scatter_labels.get(x, (x, f"TUI vs {x}"))
+
     if ax is None:
         _, ax = plt.subplots(figsize=(7, 5))
 
@@ -292,15 +307,16 @@ def plot_tui_vulnerability_scatter(
         line_kws={"color": "crimson"},
         ax=ax,
     )
-    ax.set_xlabel("SDVI (z-score medio Hardship + reddito per capita)")
-    ax.set_ylabel(f"TUI (trip per 1.000 residenti, {year})")
-    ax.set_title("TUI vs vulnerabilità socio-demografica")
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(f"TUI (trips per 1,000 residents, {year})")
+    ax.set_title(title)
     return ax
 
 
-def plot_tui_vulnerability_maps(gdf: gpd.GeoDataFrame, year: int = 2024):
-    '''Side-by-side choropleth maps of TUI and SDVI.
-    Input: analysis GeoDataFrame, TUI year. Output: matplotlib figure.
+def plot_tui_vulnerability_maps(gdf, year=2024):
+    '''
+    Side-by-side choropleth maps of TUI and SDVI.
+    Input: analysis GeoDataFrame, year. Output: matplotlib figure.
     '''
     fig, axes = plt.subplots(1, 2, figsize=(18, 9))
     plot_kw = dict(
@@ -311,17 +327,13 @@ def plot_tui_vulnerability_maps(gdf: gpd.GeoDataFrame, year: int = 2024):
     )
 
     gdf.plot(column="tui_index", cmap="RdYlGn_r", ax=axes[0], **plot_kw)
-    axes[0].set_title(f"TUI — intensità ridesourcing ({year})")
+    axes[0].set_title(f"TUI ({year})")
     axes[0].axis("off")
 
     gdf.plot(column="sdvi", cmap="YlOrRd", ax=axes[1], **plot_kw)
-    axes[1].set_title("SDVI — vulnerabilità socio-demografica")
+    axes[1].set_title("SDVI")
     axes[1].axis("off")
 
-    plt.suptitle(
-        "Confronto spaziale: ridesourcing vs vulnerabilità (76 Community Areas, escluso O'Hare)",
-        fontsize=13,
-        y=1.02,
-    )
+    plt.suptitle("TUI vs socio-demographic vulnerability (excl. O'Hare)", fontsize=13, y=1.02)
     plt.tight_layout()
     return fig
