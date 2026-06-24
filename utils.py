@@ -12,6 +12,7 @@ import seaborn as sns
 from scipy import stats
 
 OHARE_CA = 76
+DEFAULT_AVG_TRIP_COST_USD = 17.5
 
 HARDHIP_RENAME = {
     "Community Area Number": "community_area",
@@ -231,6 +232,71 @@ def compute_tui_correlations(
         })
 
     return pearson, spearman, pd.DataFrame(tests)
+
+
+def compute_weighted_tui(
+    trips_df: pd.DataFrame,
+    vulnerability: pd.DataFrame,
+    year: int = 2024,
+    avg_trip_cost_usd: float = DEFAULT_AVG_TRIP_COST_USD,
+    income_col: str = "per_capita_income",
+    exclude_ca: int = OHARE_CA,
+) -> pd.DataFrame:
+    '''
+    Financial Burden Index from annual TNP spend per capita relative to area income.
+    Input: monthly trips df, vulnerability table, year, mean trip cost (USD).
+    Output: community_area, total_spend, rideshare_spend_pc, Weighted_TUI.
+    '''
+    year_df = trips_df[trips_df["year"] == year]
+    annual = (
+        year_df.groupby("community_area", as_index=False)
+        .agg(n_trips=("n_trips", "sum"), population=("population", "mean"))
+    )
+    annual["total_spend"] = annual["n_trips"] * avg_trip_cost_usd
+    annual["rideshare_spend_pc"] = annual["total_spend"] / annual["population"]
+
+    out = annual.merge(
+        vulnerability[["community_area", income_col]],
+        on="community_area",
+        how="left",
+    )
+    out = out[out["community_area"] != exclude_ca].copy()
+    out["Weighted_TUI"] = out["rideshare_spend_pc"] / out[income_col]
+    return out
+
+
+def build_weighted_tui_map(
+    community_areas: gpd.GeoDataFrame,
+    weighted_tui: pd.DataFrame,
+) -> gpd.GeoDataFrame:
+    '''
+    Merge Weighted_TUI with community area boundaries.
+    Input: boundaries, weighted tui table. Output: GeoDataFrame for mapping.
+    '''
+    return community_areas.merge(weighted_tui, on="community_area", how="left")
+
+
+def plot_weighted_tui_map(map_df, year, ax=None):
+    '''
+    Choropleth of Weighted_TUI (financial burden) by community area.
+    Input: GeoDataFrame with Weighted_TUI, year. Output: matplotlib axes.
+    '''
+    if ax is None:
+        _, ax = plt.subplots(figsize=(14, 14))
+
+    plot_df = map_df[map_df["community_area"] != OHARE_CA].copy()
+    plot_df.plot(
+        column="Weighted_TUI",
+        cmap="YlOrRd",
+        linewidth=0.5,
+        edgecolor="black",
+        legend=True,
+        ax=ax,
+        missing_kwds={"color": "lightgrey", "label": "No data"},
+    )
+    ax.set_title(f"Weighted TUI — Financial Burden Index ({year})")
+    ax.axis("off")
+    return ax
 
 
 def save_chart(chart, filename, output_dir="data/output_charts"):
