@@ -2,6 +2,7 @@
 
 import json
 import re
+from calendar import monthrange
 from pathlib import Path
 
 import geopandas as gpd
@@ -12,6 +13,7 @@ import seaborn as sns
 from scipy import stats
 
 OHARE_CA = 76
+LOOP_CA = 32
 DEFAULT_AVG_TRIP_COST_USD = 17.5
 
 HARDHIP_RENAME = {
@@ -68,6 +70,157 @@ def source_tnp_counts(url, df_name, data_dir="data", force=False):
     tnp_counts.to_csv(out_path, index=False)
     print(f"Downloaded TNP data: {out_path}")
     return out_path
+
+
+def source_loop_travel_times(
+    url: str,
+    df_name: str,
+    year: int = 2024,
+    dropoff_ca: int = LOOP_CA,
+    exclude_pickup_ca: int = OHARE_CA,
+    data_dir: str | Path = "data",
+    force: bool = False,
+) -> Path:
+    '''
+    Download or reuse mean trip_seconds to Loop by pickup CA (monthly API aggregates).
+    Input: API url, cache name, year. Output: CSV with community_area, mean_trip_seconds, n_trips.
+    '''
+    data_dir = Path(data_dir)
+    out_path = data_dir / f"{df_name}.csv"
+    monthly_dir = data_dir / f"{df_name}_monthly"
+    if out_path.exists() and not force:
+        print(f"Using cached loop travel times: {out_path}")
+        return out_path
+
+    monthly_dir.mkdir(parents=True, exist_ok=True)
+    monthly_frames = []
+    for month in range(1, 13):
+        month_path = monthly_dir / f"{year}_{month:02d}.csv"
+        if month_path.exists() and not force:
+            chunk = pd.read_csv(month_path)
+            monthly_frames.append(chunk)
+            continue
+
+        last_day = monthrange(year, month)[1]
+        start = f"{year}-{month:02d}-01T00:00:00"
+        end = f"{year}-{month:02d}-{last_day:02d}T23:59:59"
+        where = (
+            f"dropoff_community_area={dropoff_ca} "
+            f"AND pickup_community_area IS NOT NULL "
+            f"AND pickup_community_area != {exclude_pickup_ca} "
+            f"AND trip_start_timestamp between '{start}' AND '{end}'"
+        )
+        params = {
+            "$select": "pickup_community_area, avg(trip_seconds) as mean_trip_seconds, count(trip_id) as n_trips",
+            "$where": where,
+            "$group": "pickup_community_area",
+        }
+
+        for attempt in range(3):
+            try:
+                response = requests.get(url, params=params, timeout=180)
+                response.raise_for_status()
+                break
+            except requests.RequestException:
+                if attempt == 2:
+                    raise
+                print(f"  retry {year}-{month:02d} (attempt {attempt + 2}/3)")
+
+        chunk = pd.DataFrame(response.json())
+        if chunk.empty:
+            print(f"  {year}-{month:02d}: no trips")
+            continue
+        chunk["month"] = month
+        chunk.to_csv(month_path, index=False)
+        monthly_frames.append(chunk)
+        print(f"  {year}-{month:02d}: {len(chunk)} pickup areas")
+
+    monthly = pd.concat(monthly_frames, ignore_index=True)
+    monthly["mean_trip_seconds"] = pd.to_numeric(monthly["mean_trip_seconds"], errors="coerce")
+    monthly["n_trips"] = pd.to_numeric(monthly["n_trips"], errors="coerce")
+    monthly["pickup_community_area"] = monthly["pickup_community_area"].astype(int)
+
+    weighted = monthly["mean_trip_seconds"] * monthly["n_trips"]
+    annual = (
+        monthly.assign(weighted_seconds=weighted)
+        .groupby("pickup_community_area", as_index=False)
+        .agg(mean_trip_seconds=("weighted_seconds", "sum"), n_trips=("n_trips", "sum"))
+    )
+    annual["mean_trip_seconds"] = annual["mean_trip_seconds"] / annual["n_trips"]
+    annual = annual.rename(columns={"pickup_community_area": "community_area"})
+    annual.to_csv(out_path, index=False)
+    print(f"Downloaded loop travel times: {out_path}")
+    return out_path
+
+
+def compute_loop_travel_times(
+    trips_df: pd.DataFrame,
+    year: int | None = 2024,
+    dropoff_ca: int = LOOP_CA,
+    exclude_pickup_ca: int = OHARE_CA,
+) -> pd.DataFrame:
+    '''
+    Mean trip_seconds to Loop by pickup CA from trip-level TNP records.
+    Input: trip-level df with pickup/dropoff/seconds. Output: community_area, mean_trip_seconds, n_trips.
+    '''
+    df = trips_df.copy()
+    if year is not None:
+        if "year" not in df.columns:
+            df["trip_start_timestamp"] = pd.to_datetime(df["trip_start_timestamp"])
+            df["year"] = df["trip_start_timestamp"].dt.year
+        df = df[df["year"] == year]
+
+    pickup_col = "pickup_community_area" if "pickup_community_area" in df.columns else "community_area"
+    dropoff_col = "dropoff_community_area"
+
+    df = df[
+        (pd.to_numeric(df[dropoff_col], errors="coerce") == dropoff_ca)
+        & (df[pickup_col].notna())
+        & (pd.to_numeric(df[pickup_col], errors="coerce") != exclude_pickup_ca)
+    ].copy()
+    df["trip_seconds"] = pd.to_numeric(df["trip_seconds"], errors="coerce")
+    df = df.dropna(subset=["trip_seconds"])
+
+    return (
+        df.groupby(pickup_col, as_index=False)
+        .agg(mean_trip_seconds=("trip_seconds", "mean"), n_trips=("trip_seconds", "count"))
+        .rename(columns={pickup_col: "community_area"})
+    )
+
+
+def build_loop_travel_time_map(
+    community_areas: gpd.GeoDataFrame,
+    loop_travel_times: pd.DataFrame,
+) -> gpd.GeoDataFrame:
+    '''
+    Merge mean travel times to Loop with community area boundaries.
+    Input: boundaries, loop travel table. Output: GeoDataFrame for mapping.
+    '''
+    return community_areas.merge(loop_travel_times, on="community_area", how="left")
+
+
+def plot_loop_travel_time_map(map_df, year, ax=None):
+    '''
+    Choropleth of mean rideshare travel time to the Loop by pickup CA.
+    Input: GeoDataFrame with mean_trip_seconds, year. Output: matplotlib axes.
+    '''
+    if ax is None:
+        _, ax = plt.subplots(figsize=(14, 14))
+
+    plot_df = map_df[map_df["community_area"] != OHARE_CA].copy()
+    plot_df["mean_trip_minutes"] = plot_df["mean_trip_seconds"] / 60
+    plot_df.plot(
+        column="mean_trip_minutes",
+        cmap="YlOrRd",
+        linewidth=0.5,
+        edgecolor="black",
+        legend=True,
+        ax=ax,
+        missing_kwds={"color": "lightgrey", "label": "No data"},
+    )
+    ax.set_title(f"Mean rideshare travel time to the Loop — {year} (minutes)")
+    ax.axis("off")
+    return ax
 
 
 def load_cca_population_file(filepath: str | Path, name_to_id: dict | None = None) -> pd.DataFrame:
