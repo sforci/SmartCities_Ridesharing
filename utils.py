@@ -71,6 +71,41 @@ def source_tnp_counts(url, df_name, data_dir="data", force=False):
     print(f"Downloaded TNP data: {out_path}")
     return out_path
 
+def source_tnp_fares(url, df_name, data_dir="data", force=False):
+    '''
+    Download median TNP fares by community area.
+    Input: API url, output name. Output: CSV path under data/.
+    '''
+    out_path = Path(data_dir) / f"{df_name}.csv"
+    if out_path.exists() and not force:
+        print(f"Using cached TNP data: {out_path}")
+        return out_path
+
+    query = """
+    SELECT
+    date_trunc_y(trip_start_timestamp) AS year,
+    pickup_community_area,
+    median(trip_total) AS median_fare
+    WHERE pickup_community_area IS NOT NULL
+    GROUP BY
+    date_trunc_y(trip_start_timestamp),
+    pickup_community_area
+    ORDER BY
+    date_trunc_y(trip_start_timestamp),
+    pickup_community_area
+    """
+
+    response = requests.get(url, params={"$query": query})
+    response.raise_for_status()
+
+    tnp_fares = pd.DataFrame(response.json())
+    tnp_fares["year"] = pd.to_datetime(tnp_fares["year"])
+    tnp_fares["pickup_community_area"] = tnp_fares["pickup_community_area"].astype(int)
+    tnp_fares["median_fare"] = tnp_fares["median_fare"].astype(float)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    tnp_fares.to_csv(out_path, index=False)
+    print(f"Downloaded TNP data: {out_path}")
+    return out_path
 
 def source_loop_travel_times(
     url: str,
@@ -390,8 +425,8 @@ def compute_tui_correlations(
 def compute_weighted_tui(
     trips_df: pd.DataFrame,
     vulnerability: pd.DataFrame,
+    median_trip_cost_usd: pd.DataFrame,
     year: int = 2024,
-    avg_trip_cost_usd: float = DEFAULT_AVG_TRIP_COST_USD,
     income_col: str = "per_capita_income",
     exclude_ca: int = OHARE_CA,
 ) -> pd.DataFrame:
@@ -401,11 +436,19 @@ def compute_weighted_tui(
     Output: community_area, total_spend, rideshare_spend_pc, Weighted_TUI.
     '''
     year_df = trips_df[trips_df["year"] == year]
+    
+    median_trip_cost_usd = pd.read_csv(median_trip_cost_usd)
+    median_trip_cost_usd["year"] = pd.to_datetime(median_trip_cost_usd["year"]).dt.year
+    median_trip_cost_usd = median_trip_cost_usd[median_trip_cost_usd["year"] == year]
+    median_trip_cost_usd["community_area"] = median_trip_cost_usd["pickup_community_area"].astype(int)
+    median_trip_cost_usd = median_trip_cost_usd[median_trip_cost_usd["community_area"] != 76
+]
     annual = (
         year_df.groupby("community_area", as_index=False)
         .agg(n_trips=("n_trips", "sum"), population=("population", "mean"))
     )
-    annual["total_spend"] = annual["n_trips"] * avg_trip_cost_usd
+    annual = annual.merge(median_trip_cost_usd, how="left", on="community_area")
+    annual["total_spend"] = annual["n_trips"] * annual["median_fare"]
     annual["rideshare_spend_pc"] = annual["total_spend"] / annual["population"]
 
     out = annual.merge(
