@@ -4,7 +4,7 @@ import json
 import re
 from calendar import monthrange
 from pathlib import Path
-
+import numpy as np
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -14,6 +14,8 @@ from scipy import stats
 from libpysal.weights import Queen
 from esda.moran import Moran, Moran_Local
 from splot.esda import moran_scatterplot
+from spreg import ML_Error, ML_Lag
+
 
 OHARE_CA = 76
 LOOP_CA = 32
@@ -762,3 +764,62 @@ def plot_transit_deficit(transit_gdf):
 
     plt.show()
 
+def prepare_spatial_regression_data(gdf, y_col, x_cols):
+    df = gdf.dropna(subset=[y_col, *x_cols]).copy()
+
+    # standardize X variables for easier comparison
+    for col in x_cols:
+        df[f"{col}_z"] = (df[col] - df[col].mean()) / df[col].std()
+
+    y = df[[y_col]].values
+    X = df[[f"{col}_z" for col in x_cols]].values
+
+    w = Queen.from_dataframe(df, use_index=False)
+    w.transform = "r"
+
+    return df, y, X, w, [f"{col}_z" for col in x_cols]
+
+
+def run_spatial_error_model(gdf, y_col, x_cols):
+    df, y, X, w, x_names = prepare_spatial_regression_data(gdf, y_col, x_cols)
+
+    model = ML_Error(
+        y=y,
+        x=X,
+        w=w,
+        name_y=y_col,
+        name_x=x_names,
+        name_w="queen",
+        name_ds="analysis_gdf"
+    )
+
+    return model, df, w
+
+
+def run_spatial_lag_model(gdf, y_col, x_cols):
+    df, y, X, w, x_names = prepare_spatial_regression_data(gdf, y_col, x_cols)
+
+    model = ML_Lag(
+        y=y,
+        x=X,
+        w=w,
+        name_y=y_col,
+        name_x=x_names,
+        name_w="queen",
+        name_ds="analysis_gdf"
+    )
+
+    return model, df, w
+
+
+def moran_residuals_spatial_model(model, w, filtered=False):
+    if filtered:
+        residuals = model.e_filtered.flatten()
+    else:
+        residuals = model.u.flatten()
+    moran = Moran(residuals, w, permutations=999)
+
+    print("Moran's I residuals:", moran.I)
+    print("p-value:", moran.p_sim)
+
+    return moran
