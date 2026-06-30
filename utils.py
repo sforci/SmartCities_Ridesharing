@@ -672,3 +672,93 @@ def plot_lisa_map(gdf, year, ax=None):
     ax.axis("off")
     plt.show()
 
+def zscore(x):
+    return (x - x.mean()) / x.std()
+
+
+def load_transit_points(path):
+    gdf = gpd.read_file(path)
+
+    if gdf.crs is None:
+        gdf = gdf.set_crs("EPSG:4326")
+
+    return gdf
+
+
+def count_points_in_areas(points_gdf, community_areas, count_col):
+    points = points_gdf.to_crs(community_areas.crs)
+
+    joined = gpd.sjoin(
+        points,
+        community_areas[["community_area", "geometry"]],
+        how="inner",
+        predicate="intersects"
+    )
+
+    counts = (
+        joined
+        .groupby("community_area")
+        .size()
+        .reset_index(name=count_col)
+    )
+
+    return counts
+
+
+def compute_transit_accessibility(
+    community_areas,
+    bus_path,
+    rail_path
+):
+    ca = community_areas.copy()
+
+    # project to meters to calculate area correctly
+    ca = ca.to_crs("EPSG:26916")
+    ca["area_km2"] = ca.geometry.area / 1_000_000
+
+    bus = load_transit_points(bus_path)
+    rail = load_transit_points(rail_path)
+
+    bus_counts = count_points_in_areas(bus, ca, "n_bus_stops")
+    rail_counts = count_points_in_areas(rail, ca, "n_rail_stations")
+
+    transit = (
+        ca[["community_area", "community_area_name", "area_km2", "geometry"]]
+        .merge(bus_counts, on="community_area", how="left")
+        .merge(rail_counts, on="community_area", how="left")
+    )
+    transit = transit[transit["community_area"] != 76].copy()
+
+    transit["n_bus_stops"] = transit["n_bus_stops"].fillna(0)
+    transit["n_rail_stations"] = transit["n_rail_stations"].fillna(0)
+
+    transit["bus_stops_per_km2"] = transit["n_bus_stops"] / transit["area_km2"]
+    transit["rail_stations_per_km2"] = transit["n_rail_stations"] / transit["area_km2"]
+
+    transit["bus_access_z"] = zscore(transit["bus_stops_per_km2"])
+    transit["rail_access_z"] = zscore(transit["rail_stations_per_km2"])
+
+    transit["transit_access"] = transit[["bus_access_z", "rail_access_z"]].mean(axis=1)
+    transit["transit_access_z"] = zscore(transit["transit_access"])
+    transit["transit_deficit"] = -transit["transit_access_z"]
+
+    return transit
+
+
+def plot_transit_deficit(transit_gdf):
+    fig, ax = plt.subplots(figsize=(12, 12))
+
+    transit_gdf.plot(
+        column="transit_deficit",
+        cmap="RdYlGn_r",
+        linewidth=0.5,
+        edgecolor="black",
+        legend=True,
+        ax=ax
+    )
+
+    ax.set_title("Transit Deficit Index by Community Area")
+    ax.axis("off")
+
+    plt.show()
+
