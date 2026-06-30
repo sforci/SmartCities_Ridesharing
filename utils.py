@@ -11,6 +11,9 @@ import pandas as pd
 import requests
 import seaborn as sns
 from scipy import stats
+from libpysal.weights import Queen
+from esda.moran import Moran, Moran_Local
+from splot.esda import moran_scatterplot
 
 OHARE_CA = 76
 LOOP_CA = 32
@@ -599,3 +602,73 @@ def plot_tui_vulnerability_maps(gdf, year=2024):
     plt.suptitle("TUI vs socio-demographic vulnerability (excl. O'Hare)", fontsize=13, y=1.02)
     plt.tight_layout()
     return fig
+
+def compute_moran(gdf, tui_col="tui_index"):
+    '''
+    Compute Moran's I for TUI index.
+    Input: analysis GeoDataFrame, TUI column. Output: Moran object.
+    '''
+
+    gdf = gdf.dropna(subset=[tui_col]).copy()
+    w = Queen.from_dataframe(gdf, use_index=False)
+    w.transform = "r"
+    y = gdf[tui_col].values
+    moran = Moran(y, w, permutations=999)
+    
+    print("Moran's I:", moran.I)
+    print("p-value:", moran.p_sim)
+    return moran
+
+
+def plot_moran_scatterplot(moran):
+    ''' 
+    Plot Moran scatterplot for TUI index.  
+    '''
+    fig, ax = moran_scatterplot(moran)
+    ax.set_title("Moran scatterplot: TUI")
+    plt.show()
+
+def compute_lisa(gdf, tui_col="tui_index"):
+    '''
+    Compute Local Indicators of Spatial Association (LISA) for TUI index.
+    Input: analysis GeoDataFrame, TUI column. Output: Moran_Local object.
+    '''
+    gdf = gdf.dropna(subset=[tui_col]).copy()
+    w = Queen.from_dataframe(gdf, use_index=False)
+    w.transform = "r"
+    y = gdf[tui_col].values
+    lisa = Moran_Local(y, w, permutations=999)
+
+    gdf["lisa_q"] = lisa.q
+    gdf["lisa_p"] = lisa.p_sim
+
+    gdf["lisa_cluster"] = "Not significant"
+    gdf.loc[(gdf["lisa_p"] < 0.05) & (gdf["lisa_q"] == 1), "lisa_cluster"] = "High-High"
+    gdf.loc[(gdf["lisa_p"] < 0.05) & (gdf["lisa_q"] == 2), "lisa_cluster"] = "Low-High"
+    gdf.loc[(gdf["lisa_p"] < 0.05) & (gdf["lisa_q"] == 3), "lisa_cluster"] = "Low-Low"
+    gdf.loc[(gdf["lisa_p"] < 0.05) & (gdf["lisa_q"] == 4), "lisa_cluster"] = "High-Low"
+    
+    print("LISA computed.")
+    return lisa, gdf
+
+def plot_lisa_map(gdf, year, ax=None):
+    '''
+    Choropleth of LISA clusters for TUI index.
+    Input: analysis GeoDataFrame with lisa_cluster, year. Output: matplotlib axes.
+    '''
+    if ax is None:
+        _, ax = plt.subplots(figsize=(8, 8))
+
+    gdf.plot(
+        column="lisa_cluster",
+        categorical=True,
+        linewidth=0.5,
+        edgecolor="black",
+        legend=True,
+        ax=ax,
+        missing_kwds={"color": "lightgrey", "label": "No data"},
+    )
+    ax.set_title(f"LISA Clusters for TUI Index — {year}")
+    ax.axis("off")
+    plt.show()
+
