@@ -343,13 +343,13 @@ def build_tui_map(
     year: int,
 ) -> gpd.GeoDataFrame:
     '''
-    Merge boundaries with mean annual TUI for one year.
+    Merge boundaries with median annual TUI for one year (median is robust to TUI skew).
     Input: boundaries, monthly TUI, year. Output: GeoDataFrame for mapping.
     '''
     tui_year = (
         tui[tui["year"] == year]
         .groupby("community_area", as_index=False)["tui_index"]
-        .mean()
+        .median()
     )
     return community_areas.merge(tui_year, on="community_area", how="left")
 
