@@ -50,3 +50,8 @@ traitlets==5.15.1
 typing_extensions==4.15.0
 urllib3==2.7.0
 wcwidth==0.8.1
+libpysal==4.14.1
+esda==2.9.0
+spreg==1.9.0
+splot==1.1.7
+statsmodels>=0.14.0
