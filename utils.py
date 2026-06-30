@@ -4,7 +4,6 @@ import json
 import re
 from calendar import monthrange
 from pathlib import Path
-import numpy as np
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -40,16 +39,39 @@ CCVI_RENAME = {
 }
 
 
-def source_tnp_counts(url, df_name, data_dir="data", force=False):
+def zscore(x):
     '''
-    Download or reuse monthly TNP counts by community area.
-    Input: API url, output name. Output: CSV path under data/.
+    Standardize a series to zero mean and unit standard deviation.
+    Input: numeric series. Output: z-scored series.
+    '''
+    return (x - x.mean()) / x.std()
+
+
+def _source_socrata(url, df_name, query, transform, data_dir="data", force=False):
+    '''
+    Run a Socrata SoQL query and cache the result as CSV, or reuse the cached file.
+    Input: API url, cache name, SoQL query, row transform fn. Output: CSV path under data/.
     '''
     out_path = Path(data_dir) / f"{df_name}.csv"
     if out_path.exists() and not force:
         print(f"Using cached TNP data: {out_path}")
         return out_path
 
+    response = requests.get(url, params={"$query": query})
+    response.raise_for_status()
+    df = transform(pd.DataFrame(response.json()))
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(out_path, index=False)
+    print(f"Downloaded TNP data: {out_path}")
+    return out_path
+
+
+def source_tnp_counts(url, df_name, data_dir="data", force=False):
+    '''
+    Download or reuse monthly TNP counts by community area.
+    Input: API url, output name. Output: CSV path under data/.
+    '''
     query = """
     SELECT
     date_trunc_ym(trip_start_timestamp) AS month,
@@ -64,28 +86,20 @@ def source_tnp_counts(url, df_name, data_dir="data", force=False):
     pickup_community_area
     """
 
-    response = requests.get(url, params={"$query": query})
-    response.raise_for_status()
+    def transform(df):
+        df["month"] = pd.to_datetime(df["month"])
+        df["pickup_community_area"] = df["pickup_community_area"].astype(int)
+        df["n_trips"] = df["n_trips"].astype(int)
+        return df
 
-    tnp_counts = pd.DataFrame(response.json())
-    tnp_counts["month"] = pd.to_datetime(tnp_counts["month"])
-    tnp_counts["pickup_community_area"] = tnp_counts["pickup_community_area"].astype(int)
-    tnp_counts["n_trips"] = tnp_counts["n_trips"].astype(int)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    tnp_counts.to_csv(out_path, index=False)
-    print(f"Downloaded TNP data: {out_path}")
-    return out_path
+    return _source_socrata(url, df_name, query, transform, data_dir, force)
+
 
 def source_tnp_fares(url, df_name, data_dir="data", force=False):
     '''
     Download median TNP fares by community area.
     Input: API url, output name. Output: CSV path under data/.
     '''
-    out_path = Path(data_dir) / f"{df_name}.csv"
-    if out_path.exists() and not force:
-        print(f"Using cached TNP data: {out_path}")
-        return out_path
-
     query = """
     SELECT
     date_trunc_y(trip_start_timestamp) AS year,
@@ -100,17 +114,13 @@ def source_tnp_fares(url, df_name, data_dir="data", force=False):
     pickup_community_area
     """
 
-    response = requests.get(url, params={"$query": query})
-    response.raise_for_status()
+    def transform(df):
+        df["year"] = pd.to_datetime(df["year"])
+        df["pickup_community_area"] = df["pickup_community_area"].astype(int)
+        df["median_fare"] = df["median_fare"].astype(float)
+        return df
 
-    tnp_fares = pd.DataFrame(response.json())
-    tnp_fares["year"] = pd.to_datetime(tnp_fares["year"])
-    tnp_fares["pickup_community_area"] = tnp_fares["pickup_community_area"].astype(int)
-    tnp_fares["median_fare"] = tnp_fares["median_fare"].astype(float)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    tnp_fares.to_csv(out_path, index=False)
-    print(f"Downloaded TNP data: {out_path}")
-    return out_path
+    return _source_socrata(url, df_name, query, transform, data_dir, force)
 
 def source_loop_travel_times(
     url: str,
@@ -346,8 +356,8 @@ def build_tui_map(
 
 def load_vulnerability_data(data_dir: str | Path = "data") -> pd.DataFrame:
     '''
-    Load hardship, income, CCVI and compute HSVI and SDVI.
-    Input: data folder. Output: vulnerability table per community_area.
+    Load and clean source vulnerability inputs (Hardship Index, per capita income, CCVI).
+    Input: data folder. Output: merged raw table per community_area (no derived index).
     '''
     data_dir = Path(data_dir)
     hardship = pd.read_csv(data_dir / "hardship_index.csv").rename(columns=HARDHIP_RENAME)
@@ -372,10 +382,18 @@ def load_vulnerability_data(data_dir: str | Path = "data") -> pd.DataFrame:
         on="community_area",
         how="outer",
     )
+    return vulnerability
 
+
+def build_vulnerability_indices(vulnerability: pd.DataFrame) -> pd.DataFrame:
+    '''
+    Build the composite vulnerability indices HSVI and SDVI from raw inputs.
+    Input: raw table from load_vulnerability_data. Output: same table with z-scores, hsvi, sdvi.
+    '''
+    vulnerability = vulnerability.copy()
     vulnerability["income_vuln"] = -vulnerability["per_capita_income"]
     for col in ["hardship_index", "income_vuln", "ccvi_score"]:
-        vulnerability[f"{col}_z"] = (vulnerability[col] - vulnerability[col].mean()) / vulnerability[col].std()
+        vulnerability[f"{col}_z"] = zscore(vulnerability[col])
     vulnerability["hsvi"] = vulnerability[["hardship_index_z", "ccvi_score_z"]].mean(axis=1)
     vulnerability["sdvi"] = vulnerability[["hardship_index_z", "income_vuln_z"]].mean(axis=1)
     return vulnerability
@@ -446,8 +464,7 @@ def compute_weighted_tui(
     median_trip_cost_usd["year"] = pd.to_datetime(median_trip_cost_usd["year"]).dt.year
     median_trip_cost_usd = median_trip_cost_usd[median_trip_cost_usd["year"] == year]
     median_trip_cost_usd["community_area"] = median_trip_cost_usd["pickup_community_area"].astype(int)
-    median_trip_cost_usd = median_trip_cost_usd[median_trip_cost_usd["community_area"] != 76
-]
+    median_trip_cost_usd = median_trip_cost_usd[median_trip_cost_usd["community_area"] != exclude_ca]
     annual = (
         year_df.groupby("community_area", as_index=False)
         .agg(n_trips=("n_trips", "sum"), population=("population", "mean"))
@@ -623,8 +640,9 @@ def compute_moran(gdf, tui_col="tui_index"):
 
 
 def plot_moran_scatterplot(moran):
-    ''' 
-    Plot Moran scatterplot for TUI index.  
+    '''
+    Plot the Moran scatterplot for the TUI index.
+    Input: Moran object. Output: shows the figure.
     '''
     fig, ax = moran_scatterplot(moran)
     ax.set_title("Moran scatterplot: TUI")
@@ -674,11 +692,11 @@ def plot_lisa_map(gdf, year, ax=None):
     ax.axis("off")
     plt.show()
 
-def zscore(x):
-    return (x - x.mean()) / x.std()
-
-
 def load_transit_points(path):
+    '''
+    Load a transit points layer and ensure a geographic CRS.
+    Input: file path. Output: GeoDataFrame in EPSG:4326 when CRS was missing.
+    '''
     gdf = gpd.read_file(path)
 
     if gdf.crs is None:
@@ -688,6 +706,10 @@ def load_transit_points(path):
 
 
 def count_points_in_areas(points_gdf, community_areas, count_col):
+    '''
+    Count points falling inside each community area via spatial join.
+    Input: points, community areas, output column name. Output: community_area, count_col.
+    '''
     points = points_gdf.to_crs(community_areas.crs)
 
     joined = gpd.sjoin(
@@ -712,6 +734,10 @@ def compute_transit_accessibility(
     bus_path,
     rail_path
 ):
+    '''
+    Build a transit accessibility and deficit index from bus stop and rail station density.
+    Input: community areas, bus and rail point paths. Output: per-area transit GeoDataFrame.
+    '''
     ca = community_areas.copy()
 
     # project to meters to calculate area correctly
@@ -729,7 +755,7 @@ def compute_transit_accessibility(
         .merge(bus_counts, on="community_area", how="left")
         .merge(rail_counts, on="community_area", how="left")
     )
-    transit = transit[transit["community_area"] != 76].copy()
+    transit = transit[transit["community_area"] != OHARE_CA].copy()
 
     transit["n_bus_stops"] = transit["n_bus_stops"].fillna(0)
     transit["n_rail_stations"] = transit["n_rail_stations"].fillna(0)
@@ -748,6 +774,10 @@ def compute_transit_accessibility(
 
 
 def plot_transit_deficit(transit_gdf):
+    '''
+    Choropleth of the transit deficit index by community area.
+    Input: transit GeoDataFrame with transit_deficit. Output: shows the figure.
+    '''
     fig, ax = plt.subplots(figsize=(12, 12))
 
     transit_gdf.plot(
@@ -765,54 +795,64 @@ def plot_transit_deficit(transit_gdf):
     plt.show()
 
 def prepare_spatial_regression_data(gdf, y_col, x_cols):
+    '''
+    Drop NA, z-standardize predictors and build a row-standardized Queen weights matrix.
+    Input: GeoDataFrame, y column, x columns. Output: df, y, X, w, standardized x names.
+    '''
     df = gdf.dropna(subset=[y_col, *x_cols]).copy()
 
-    # standardize X variables for easier comparison
     for col in x_cols:
-        df[f"{col}_z"] = (df[col] - df[col].mean()) / df[col].std()
+        df[f"{col}_z"] = zscore(df[col])
 
+    x_names = [f"{col}_z" for col in x_cols]
     y = df[[y_col]].values
-    X = df[[f"{col}_z" for col in x_cols]].values
+    X = df[x_names].values
 
     w = Queen.from_dataframe(df, use_index=False)
     w.transform = "r"
 
-    return df, y, X, w, [f"{col}_z" for col in x_cols]
+    return df, y, X, w, x_names
+
+
+def _run_spatial_model(model_cls, gdf, y_col, x_cols):
+    '''
+    Fit a spreg spatial model on standardized predictors and Queen weights.
+    Input: spreg model class, GeoDataFrame, y/x columns. Output: model, df, weights.
+    '''
+    df, y, X, w, x_names = prepare_spatial_regression_data(gdf, y_col, x_cols)
+    model = model_cls(
+        y=y,
+        x=X,
+        w=w,
+        name_y=y_col,
+        name_x=x_names,
+        name_w="queen",
+        name_ds="analysis_gdf",
+    )
+    return model, df, w
 
 
 def run_spatial_error_model(gdf, y_col, x_cols):
-    df, y, X, w, x_names = prepare_spatial_regression_data(gdf, y_col, x_cols)
-
-    model = ML_Error(
-        y=y,
-        x=X,
-        w=w,
-        name_y=y_col,
-        name_x=x_names,
-        name_w="queen",
-        name_ds="analysis_gdf"
-    )
-
-    return model, df, w
+    '''
+    Fit a maximum likelihood spatial error model (ML_Error).
+    Input: GeoDataFrame, y/x columns. Output: model, df, weights.
+    '''
+    return _run_spatial_model(ML_Error, gdf, y_col, x_cols)
 
 
 def run_spatial_lag_model(gdf, y_col, x_cols):
-    df, y, X, w, x_names = prepare_spatial_regression_data(gdf, y_col, x_cols)
-
-    model = ML_Lag(
-        y=y,
-        x=X,
-        w=w,
-        name_y=y_col,
-        name_x=x_names,
-        name_w="queen",
-        name_ds="analysis_gdf"
-    )
-
-    return model, df, w
+    '''
+    Fit a maximum likelihood spatial lag model (ML_Lag).
+    Input: GeoDataFrame, y/x columns. Output: model, df, weights.
+    '''
+    return _run_spatial_model(ML_Lag, gdf, y_col, x_cols)
 
 
 def moran_residuals_spatial_model(model, w, filtered=False):
+    '''
+    Moran's I on spatial model residuals (raw or spatially filtered).
+    Input: fitted spreg model, weights, filtered flag. Output: Moran object.
+    '''
     if filtered:
         residuals = model.e_filtered.flatten()
     else:
