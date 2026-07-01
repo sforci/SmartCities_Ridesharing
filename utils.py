@@ -729,14 +729,42 @@ def count_points_in_areas(points_gdf, community_areas, count_col):
     return counts
 
 
+def compute_gtfs_stop_frequency(gtfs_dir, day="wednesday"):
+    '''
+    Count scheduled departures per stop on a representative weekday from a GTFS feed.
+    Input: GTFS folder, weekday name. Output: GeoDataFrame of stops with weekday_departures.
+    '''
+    gtfs_dir = Path(gtfs_dir)
+    calendar = pd.read_csv(gtfs_dir / "calendar.txt")
+    active_services = set(calendar.loc[calendar[day] == 1, "service_id"])
+
+    trips = pd.read_csv(gtfs_dir / "trips.txt", usecols=["trip_id", "service_id"])
+    active_trips = set(trips.loc[trips["service_id"].isin(active_services), "trip_id"])
+
+    stop_times = pd.read_csv(gtfs_dir / "stop_times.txt", usecols=["trip_id", "stop_id"])
+    stop_times = stop_times[stop_times["trip_id"].isin(active_trips)]
+    departures = (
+        stop_times.groupby("stop_id").size().reset_index(name="weekday_departures")
+    )
+
+    stops = pd.read_csv(gtfs_dir / "stops.txt", usecols=["stop_id", "stop_lat", "stop_lon"])
+    stops = stops.merge(departures, on="stop_id", how="inner")
+    return gpd.GeoDataFrame(
+        stops,
+        geometry=gpd.points_from_xy(stops["stop_lon"], stops["stop_lat"]),
+        crs="EPSG:4326",
+    )
+
+
 def compute_transit_accessibility(
     community_areas,
     bus_path,
-    rail_path
+    rail_path,
+    gtfs_dir=None,
 ):
     '''
-    Build a transit accessibility and deficit index from bus stop and rail station density.
-    Input: community areas, bus and rail point paths. Output: per-area transit GeoDataFrame.
+    Build a transit accessibility and deficit index from stop/station density and (optional) service frequency.
+    Input: community areas, bus/rail point paths, optional GTFS folder. Output: per-area transit GeoDataFrame.
     '''
     ca = community_areas.copy()
 
@@ -766,7 +794,28 @@ def compute_transit_accessibility(
     transit["bus_access_z"] = zscore(transit["bus_stops_per_km2"])
     transit["rail_access_z"] = zscore(transit["rail_stations_per_km2"])
 
-    transit["transit_access"] = transit[["bus_access_z", "rail_access_z"]].mean(axis=1)
+    access_components = ["bus_access_z", "rail_access_z"]
+
+    if gtfs_dir is not None:
+        stops = compute_gtfs_stop_frequency(gtfs_dir)
+        stops_in_ca = gpd.sjoin(
+            stops.to_crs(ca.crs),
+            ca[["community_area", "geometry"]],
+            how="inner",
+            predicate="intersects",
+        )
+        freq = (
+            stops_in_ca.groupby("community_area")["weekday_departures"]
+            .sum()
+            .reset_index(name="weekday_departures")
+        )
+        transit = transit.merge(freq, on="community_area", how="left")
+        transit["weekday_departures"] = transit["weekday_departures"].fillna(0)
+        transit["departures_per_km2"] = transit["weekday_departures"] / transit["area_km2"]
+        transit["freq_access_z"] = zscore(transit["departures_per_km2"])
+        access_components.append("freq_access_z")
+
+    transit["transit_access"] = transit[access_components].mean(axis=1)
     transit["transit_access_z"] = zscore(transit["transit_access"])
     transit["transit_deficit"] = -transit["transit_access_z"]
 
