@@ -8,10 +8,24 @@
 \usepackage[utf8x]{inputenc}
 \usepackage{amsmath}
 \usepackage{graphicx}
+\usepackage{microtype}
 \usepackage{multirow}
+\usepackage{tabularray}
+\usepackage[normalem]{ulem}
 \usepackage[colorinlistoftodos]{todonotes}
+\usepackage[most]{tcolorbox}
+
+\newtcolorbox{highlightbox}{
+  colback=gray!8,
+  colframe=gray!50,
+  boxrule=0.6pt,
+  arc=2pt,
+  left=6pt, right=6pt, top=4pt, bottom=4pt
+}
 
 \setcounter{tocdepth}{3}
+
+\newcommand{\datasettitle}[1]{\uline{#1}\penalty0\hspace{0pt}}
 
 \begin{document}
 
@@ -43,95 +57,87 @@ TUI peaks in central and lakefront areas and correlates negatively with vulnerab
 \tableofcontents
 \newpage
 
-\section{Problem Description and Indicators}
+\section{Problem Description}
+
 
 \subsection{Introduction}
-    Smart-city mobility policy increasingly treats digital platforms as part of urban transport infrastructure alongside buses, rail, and cycling networks. Real-time matching, cashless payment, and citywide coverage make Transportation Network Providers (TNP) such as Uber and Lyft attractive to planners seeking flexible capacity. Yet their private, fare-based model differs fundamentally from public transit: access depends on willingness and ability to pay, and trip records rarely identify where passengers live. Equity analysis must therefore ask not only where platforms operate, but who bears the cost relative to local income and how usage relates to existing public supply.
+    \paragraph{Smart cities and mobility policy} A \textbf{smart city} is an urban system that uses data, digital infrastructure, integrated governance and technology in general to improve public services, quality of life, and environmental sustainability, and in its huge city planning, the \textbf{mobility policy} is one of the core domains.
+    \textbf{Urban transport choices shape access to jobs, healthcare, education, and social life}. For this reason, smart mobility policy combines \textit{public transport data, private mobility platforms, and spatial indicators} to evaluate efficiency, but also \textbf{equity across neighborhoods}.
+    Smart-city mobility policy increasingly treats \textbf{digital platforms as part of urban transport infrastructure} alongside buses, rail, and cycling networks. Due to their modern way of functioning, with features like \textit{real-time matching, cashless payment, and citywide coverage}, they make \textbf{Transportation Network Providers (TNP)} such as Uber and Lyft attractive to planners seeking \textbf{flexible capacity}.
+    And yet, their private, fare-based model differs fundamentally from public transit: \textbf{access depends on willingness and ability to pay}. Equity analysis must therefore ask who bears the cost relative to local income and, even more importantly, \textbf{how usage relates to existing public supply}.
 
-    Chicago is a revealing case. The city is the third largest in the United States, organised around a radial street grid and an elevated rail loop that anchors the central business district. The Chicago Transit Authority (CTA) provides extensive bus and ``L'' rail service, but coverage and frequency thin toward the urban fringe. Decades of residential segregation have concentrated lower-income households on the South and West Sides while employment, retail, and nightlife remain strongly oriented toward the Loop and lakefront. Commuting patterns documented in spatial mismatch research \cite{kwan1998} show that many residents travel long distances to central job clusters, raising both time and monetary costs of mobility.
+    \paragraph{Choosing Chicago} Chicago is a revealing case. The city is the third largest in the United States, organised around a \textit{radial street grid} and an \textit{elevated rail loop} that anchors the \textbf{central business district (CBD)}, also called, in fact, The Loop. It also qualifies as a smart-city context: Chicago publishes open mobility and socioeconomic data through the Chicago Data Portal, integrates CTA operations with digital GTFS feeds, and supports neighbourhood-scale, evidence-based planning. Under the OECD definition of cities and functional urban areas \cite{oecd_fua2012}, Chicago is classified as a FUA in every aspect, e.g. the city core plus the surrounding commuting zone where most daily work and service trips are economically integrated. 
+    
+    \paragraph{Chicago Transportation and its issues} The CTA provides extensive bus and ``L'' rail service, but coverage and frequency thin toward the urban fringe. \textbf{Decades of residential segregation} have concentrated lower-income households on the \textbf{South and West Sides} while \textbf{employment, retail, and nightlife} remain strongly oriented toward the \textbf{Loop and lakefront.} Commuting patterns documented in spatial mismatch research \cite{kwan1998} show that \textbf{many residents travel long distances to central job clusters}, raising both time and monetary costs of mobility.
 
-    Ridesourcing entered this landscape after the city began publishing TNP trip data under open-data regulation. Platforms are often described as filling ``last mile'' gaps or serving neighbourhoods poorly reached by fixed routes. The compensatory narrative is politically appealing: if TNP intensity is highest where CTA is weakest and populations are most vulnerable, private mobility could be read as an informal safety net. If instead intensity peaks where transit is already strong and incomes higher, platforms reinforce existing urban hierarchies rather than correcting them. This report tests which story the spatial data support at Community Area scale in 2024.
+    \textbf{Ridesourcing} entered this landscape after the city began publishing TNP trip data under open-data regulation. Platforms are often described as filling \textit{``last mile'' gaps} or serving neighbourhoods poorly reached by fixed routes.
 
-    Community Areas are the city's official statistical neighbourhoods: 77 contiguous zones used consistently in planning, demographics, and open data. They are coarse for street-level behaviour but appropriate for ecological comparison of how ridesourcing, vulnerability, and transit supply co-locate across Chicago. All indicators below are constructed at this scale and interpreted as neighbourhood patterns, not individual trip choices.
+    \paragraph{Community Areas} Community Areas (CAs) are the \textbf{city's official statistical neighbourhoods}: 77 contiguous zones used consistently in planning, demographics, and open data. They are coarse for street-level behaviour but appropriate for ecological comparison of \textbf{how ridesourcing, vulnerability, and transit supply co-locate across Chicago}. Five indicators are built at this scale from the open-data sources described in Section~\ref{sec:data-analytics}; formal definitions appear in Section~\ref{sec:indicators}.
 
 \subsection{Smart cities problem selection}
-    Building on the Chicago context above, we frame ridesourcing equity as a smart-cities mobility problem: digital platforms intersect with fixed public infrastructure and neighbourhood socioeconomic structure. The unit of analysis remains the Community Area, with CA~76 (O'Hare Airport) excluded as a transport-hub outlier ($n=75$). Median 2024 TUI exceeds 8{,}000 pickups per 1{,}000 residents in the Loop, Near North Side, and Near West Side, while East Side (CA~52) and Hegewisch (CA~55) fall below 500. This gradient motivates the equity question developed in the next subsection.
+    The compensatory narrative is politically appealing: \emph{if TNP intensity is highest where CTA is weakest and populations are most vulnerable, private mobility could be read as an informal safety net. If instead intensity peaks where transit is already strong and incomes higher, platforms reinforce existing urban hierarchies rather than correcting them.}\\
+
+    This report tests \textbf{which story the spatial data support} at Community Area scale in 2024, focusing on \textbf{ridesourcing equity in Chicago}.
+
+    To do so, we use \textbf{five indicators} at Community Area level: \textbf{TUI} ("Transport Usage Index", a.k.a. ridesourcing usage intensity), \textbf{SDVI/HSVI} (socio-demographic vulnerability), \textbf{Weighted TUI} (income-normalised financial burden), mean \textbf{travel time to the Loop}, and the \textbf{Transit Accessibility Index} (CTA infrastructure and GTFS weekday frequency).
+    Their data inputs and formal definitions are presented in Section~\ref{sec:data-analytics} and Section~\ref{sec:indicators} respectively.
+
+    With these indicators, we analyse \textbf{75} of Chicago's 77 CAs in 2024. CA~76 (the airport, O'Hare) is excluded as a transport-hub outlier, and CA~77 (Edgewater) is dropped because 2024 TUI is missing.\\
+
+
+    The \textbf{scale of inequality} is already visible in TUI: in 2024, central areas such as the Loop, Near North Side, and Near West Side record more than 8{,}000 TNP pickups per 1{,}000 residents, while peripheral East Side (CA~52) and Hegewisch (CA~55) remain below 500.\\
+    This \textbf{centre--periphery gap} is the \textbf{empirical starting point for the research question} we chose:
+    \begin{highlightbox}
+        \textbf{Research question.} Does ridesourcing act as a mobility equaliser in transit-poor, vulnerable peripheries, or as a costly substitute where public transport is already strong?
+        \end{highlightbox}
+
 
 \subsection{Problem importance and urban impact}
-    \emph{Does ridesourcing act as a mobility equaliser where public transport is deficient in vulnerable peripheral areas, or as a costly substitute concentrated where transit is already adequate?}
 
-    The question matters for three stakeholder groups. Residents in high-hardship peripheries may depend on long bus rides or costly TNP trips to reach jobs and services; if platforms rarely serve those origins, digital mobility widens rather than narrows gaps. City planners allocating CTA capital face pressure to partner with TNP for first/last mile service; our evidence tests whether high TNP intensity already marks zones where such partnerships would duplicate existing supply. Platform operators and regulators need clarity on whether open trip data support an equity narrative or instead document central market concentration.
+    Ridesourcing is now discussed as part of urban mobility policy, rather than a mere private transport service. It is therefore important for many types of people, the so-called \textbf{stakeholders}: starting from \textbf{residents} in high-hardship peripheral areas, where mobility often depends on long CTA trips or expensive TNP rides to reach jobs and services (a \$20-\$30 trip to the Loop weighs much more on household budgets in Riverdale than in Lincoln Park).  Passing then through the \textbf{planners}, that could be tempted to treat TNP as an automatic substitute for public transport investment, not paying attention to the fact that if ridesourcing is already strongest where CTA supply is dense, partnerships for first/last-mile service may duplicate existing coverage instead of filling real gaps.
+    Lastly, \textbf{operators and regulators} can be interested in the open trip data, that can support two opposite narratives: mobility equalisation in underserved areas, or market concentration in central zones that are already well connected.
 
-    For residents, low peripheral TUI may reflect fare and travel-time barriers rather than disinterest. A \$20--\$30 airport-style fare to the Loop from the far South Side is a larger share of monthly income in Riverdale than in Lincoln Park. For policymakers, treating TNP as an automatic substitute for CTA investment is risky if usage peaks where bus, rail, and scheduled frequency are already strong. Our initial hypothesis was that TUI would be highest in transit-poor, vulnerable peripheries if ridesourcing compensated for CTA shortfalls. The analysis tests whether the data support that story or the opposite.
-
-\subsection{Indicators}
-    All indicators are ecological: each value summarises a Community Area rather than an individual rider. They are constructed in the notebook from merged open-data layers and are comparable across CAs after z-scoring where noted. Table~\ref{tab:indicators} lists roles; equations below define computation.
-
-    \textit{(1) Transport Usage Index (TUI).}
-    Monthly pickups per 1{,}000 residents; 2024 values use the within-area \textbf{median} (robust to skew; citywide skewness $\approx 3.2$):
-    \begin{equation}
-        \mathrm{TUI}_{i,m} = \frac{\text{TNP pickups}_{i,m}}{\text{population}_{i,m}} \times 1000.
-    \end{equation}
-    Higher TUI means more pickups per resident at the origin. It measures usage intensity, not dependency: central pickups include commuters, tourists, and nightlife visitors who do not live in the origin CA.
-
-    \textit{(2) SDVI and HSVI.}
-    Chicago publishes hardship and income at CA level and CCVI as an external health-oriented vulnerability score. We build two composites from z-standardised inputs \cite{chicago_hardship,chicago_ccvi} so that regression can use a single socioeconomic control without double-counting correlated fields:
-    \begin{align}
-        \mathrm{SDVI}_i &= \mathrm{mean}\bigl(z(\mathrm{Hardship}_i),\, z(-\mathrm{Income}_i)\bigr),\\
-        \mathrm{HSVI}_i &= \mathrm{mean}\bigl(z(\mathrm{Hardship}_i),\, z(\mathrm{CCVI}_i)\bigr).
-    \end{align}
-    HSVI is the baseline regressor ($r=0.96$ with SDVI; only one belongs in regression). CCVI is retained for descriptive comparisons.
-
-    \textit{(3) Weighted TUI.}
-    Income-normalised annual ridesourcing spend using area-specific median fares from the TNP API \cite{chicago_tnp}:
-    \begin{equation}
-        \mathrm{Weighted\_TUI}_i = \frac{(\text{n\_trips}_{i,y} \times \text{median\_fare}_i) / \text{population}_{i,y}}{\text{per capita income}_i}.
-    \end{equation}
-
-    \textit{(4) Mean travel time to the Loop.}
-    Mean \texttt{trip\_seconds} from trip-level records with dropoff in CA~32 (Loop), aggregated by pickup CA for 2024.
-
-    \textit{(5) Transit Accessibility Index (TAI).}
-    Per CA we z-score bus stops/km$^2$, rail stations/km$^2$, and weekday GTFS departures/km$^2$ \cite{cta_bus_stops,cta_rail_stations,gtfs_cta}, then average:
-    \begin{equation}
-        \mathrm{TransitAccess}_i = \mathrm{mean}\bigl(z(\mathrm{Bus}_i),\, z(\mathrm{Rail}_i),\, z(\mathrm{Freq}_i)\bigr), \quad
-        \mathrm{TransitDeficit}_i = -z(\mathrm{TransitAccess}_i).
-    \end{equation}
-    The index combines physical infrastructure with scheduled service frequency, not stop counts alone.
-
-    \begin{table}[htbp]
-        \centering
-        \caption{Summary of indicators.}
-        \label{tab:indicators}
-        \small
-        \begin{tabular}{|l|c|p{5.5cm}|}
-            \hline
-            \textbf{Indicator} & \textbf{Built by us?} & \textbf{Role} \\
-            \hline
-            TUI & Yes & Usage intensity (median 2024) \\
-            SDVI / HSVI & Yes (CCVI external) & Socio-demographic vulnerability \\
-            Weighted TUI & Yes & Income-normalised financial burden \\
-            Loop travel time & Yes & Peripherality to employment core \\
-            TAI / transit deficit & Yes & CTA supply + GTFS frequency \\
-            \hline
-        \end{tabular}
-    \end{table}
+    We therefore test the \textbf{compensatory hypothesis}: \emph{if ridesourcing fills public transport gaps, TUI should be highest in transit-poor and vulnerable peripheries. If not, platforms likely reinforce existing centre--periphery inequalities rather than correcting them.}
 
 \subsection{Ethical and social implications}
-    TUI can be inflated in central CAs by non-resident activity because TNP records lack passenger home location. Vulnerability inputs (hardship and income, 2008--2012 vintage) pre-date 2024 trips. GTFS schedules reflect the 2026 feed while trip counts are from 2024.
 
-    Low-TUI maps risk labelling peripheral communities as ``disengaged'' when they may be underserved and income-constrained. Results should pair intensity maps with Weighted TUI and transit deficit. The design is associational and ecological: findings describe neighbourhood-scale patterns, not individual choices or causal policy effects.
-
+\begin{table}[htbp]
+    \centering
+    \label{tab:ethical}
+    \small
+    \begin{tblr}{
+        colspec = {Q[4cm,c,l] Q[9.3cm,p,l,leftsep=1mm,rightsep=1mm]},
+        row{1} = {font=\bfseries},
+        hline{1,Z} = {solid},
+        vline{1-Z} = {solid},
+    }
+        Issue & Implication \\
+        Non-resident pickup bias &
+        TUI can be inflated in central CAs by non-resident activity because \textbf{TNP records lack passenger home location}. \\
+        Temporal data mismatch &
+        Vulnerability inputs (hardship and income, 2008--2012 vintage) pre-date 2024 trips. GTFS schedules reflect the 2026 feed while trip counts are from 2024. \\
+        Misreading low TUI &
+        Low-TUI maps risk labelling peripheral communities as \textbf{``disengaged''} when they may be \textbf{underserved and income-constrained}. Results should pair intensity maps with \textbf{Weighted TUI} and transit deficit. \\
+    \end{tblr}
+\end{table}
 
 \newpage
-\section{Data Analytics, Optimization and Policy Suggestions}
 
-This section documents how open data were assembled, cleaned, and analysed to test the compensatory hypothesis. We proceed from source description through spatial diagnostics, inferential models, and map-based interpretation, then summarise policy implications. Prediction, classification, and optimisation tasks are not part of the assignment brief; where relevant we note how the available monthly series could support future work without treating forecasting as a deliverable.
+\section{Data Analytics, Optimization and Policy Suggestions}\label{sec:data-analytics}
 
-\paragraph{Dataset identification and selection.}
-All data are open municipal or regional sources retrieved through the Chicago Data Portal, CMAP, or CTA feeds and processed in \texttt{SmartCities\_RideSharing.ipynb} with helper functions in \texttt{utils.py}. Cached extracts are stored under \texttt{data/} so analyses can be reproduced without repeated API calls. No additional web scraping was required beyond the documented notebook pipeline.
+This section documents how open data were assembled, cleaned, and analysed to test the compensatory hypothesis. We proceed from source description through spatial diagnostics, inferential models, and map-based interpretation, then summarise policy implications. 
 
-We selected sources that jointly cover the three dimensions of the research question: ridesourcing demand (TNP), socioeconomic context (hardship, income, CCVI), and public transport supply (CTA stops, rail, GTFS schedules). Trip-level TNP records from 2023 onward add fare and duration fields absent from the legacy 2018--2022 monthly aggregates. Population denominators come from CMAP Community Data Snapshots so TUI reflects trips per resident rather than per daytime visitor. Spatial boundaries use the official Community Area layer to keep all merges consistent.
+\subsection{Dataset identification and selection}
+All inputs are \textbf{open municipal or regional datasets}, specifically selected thanks to their capacity in covering the \textbf{three dimensions} of the research question: \textbf{ridesourcing demand}, \textbf{socioeconomic context}, and \textbf{public transport supply}.\\
+Here below the description of each dataset.
+
+\paragraph{\datasettitle{TNP monthly trip counts (2018--2024)}} Chicago publishes Transportation Network Provider records through \textbf{two successive open-data releases}: one covering \textbf{2018--2022} and a second covering \textbf{2023--2024} \cite{chicago_tnp,chicago_tnp_legacy}. Codebase queries each release through the \textbf{city Socrata API} and asks the server to return \textbf{monthly pickup counts by CA} whereas the record has a valid pickup area. The two extracts are combined into a single monthly series, from which we derive calendar years. These counts form the \textbf{numerator of the Transport Usage Index} and support the descriptive comparison between \textbf{2018 and 2024}.
+
+\paragraph{\datasettitle{TNP median fares by Community Area (2023--2024)}} It provides, for each pickup Community Area and calendar year, the \textbf{median total amount charged per trip}. Original data is divided in individual rides, therefore the codebase asks the portal to \textbf{aggregate on the server} in order to obtain a \textbf{small summary table} (one median fare per zone per year). The \textbf{2024 values} convert annual trip volumes into \textbf{estimated ridesourcing expenditure} in the \textbf{Weighted TUI}, using \textbf{area-specific price levels} instead of a uniform citywide fare. Unfortunately, we didn't find data before 2023-2024 window, so no comparison between periods can be made.
+
+\paragraph{\datasettitle{TNP travel time to the Loop (2024)}}  For each month we obtain the \textbf{mean travel time} and the \textbf{number of trips per pickup area}. Trip duration is also limited to the \textbf{2023--2024 release}. Because a single annual query would be too large, we request data \textbf{one month at a time} for trips \textbf{ending in the Loop}, with a valid pickup Community Area and with \textbf{O'Hare excluded as an origin}. Failed requests are \textbf{retried up to three times}. Monthly results are combined into an \textbf{annual trip-weighted average} per Community Area. This indicator captures \textbf{realised ridesourcing travel time to the central business district}.
+
+\paragraph{\datasettitle{Population (CMAP Community Data Snapshots)}:} Resident population denominators come from the \textbf{Chicago Metropolitan Agency for Planning Community Data Snapshots} \cite{cmap_population}. Annual files provide \textbf{total population by Community Area}. We read all available snapshot years, align neighbourhood names and numeric identifiers across files, and build a \textbf{panel of population by area and year}. Population is then matched to monthly trip counts before the Transport Usage Index is calculated, so the rate reflects \textbf{trips per resident rather than per daytime visitor}.
 
 \paragraph{Dataset description.}
 Table~\ref{tab:datasets} summarises each input. Below we describe content, coverage, and role in the analysis.
@@ -144,7 +150,8 @@ Table~\ref{tab:datasets} summarises each input. Below we describe content, cover
 
 \textit{Socioeconomic vulnerability.} The city hardship index and per capita income \cite{chicago_hardship} attach to each CA from a 2008--2012 vintage release. The Chicago COVID-19 Community Vulnerability Index (CCVI) \cite{chicago_ccvi} adds an external health-oriented score. Raw fields are merged in \texttt{load\_vulnerability\_data}; composite SDVI and HSVI are built in \texttt{build\_vulnerability\_indices}.
 
-\textit{CTA infrastructure and schedules.} Bus stop and rail station point layers \cite{cta_bus_stops,cta_rail_stations} are spatially joined to CA polygons to count assets per km$^2$. The CTA GTFS feed in \texttt{data/google\_transit} \cite{gtfs_cta} supplies \texttt{stops}, \texttt{stop\_times}, \texttt{trips}, and \texttt{calendar} tables. Weekday departures per stop are summed and normalised by area to capture scheduled service frequency, not physical stop presence alone. The GTFS feed reflects 2026 schedules while trip counts are from 2024; we assume weekday departure rankings across CAs are stable enough for cross-sectional comparison.
+\paragraph{Dataset summary.}
+Table~\ref{tab:datasets} condenses \textbf{sources, coverage, spatial unit, and analytical role}. The paragraphs above describe what each dataset contains and how it was obtained or prepared for analysis.
 
 \begin{table}[htbp]
     \centering
@@ -173,6 +180,59 @@ The notebook pipeline standardises identifiers and geometry before indicator con
 Vulnerability fields are left-joined from hardship, income, and CCVI tables; composite SDVI and HSVI are computed only after z-scoring inputs citywide. Transit point layers are reprojected to EPSG:26916 (NAD83 / UTM zone 16N) so area in km$^2$ and stop densities are consistent. Bus stops, rail stations, and GTFS stop coordinates are spatially joined to CA polygons; stops falling on boundaries are assigned by centroid containment. GTFS weekday departures are counted from \texttt{stop\_times} joined to \texttt{calendar} service days, then summed per stop and aggregated to CA level before normalisation by area.
 
 Queen contiguity weights for spatial statistics exclude CA~76 and islands with no neighbours. The analysis sample retains CAs with non-missing TUI, HSVI, transit deficit, and Loop travel time, yielding $n=75$ complete cases for correlation tables and regression. All maps and models use the same filtered GeoDataFrame to keep figures and coefficients aligned.
+
+\subsection{Indicator construction}\label{sec:indicators}
+Once the datasets above are merged and cleaned, we construct five ecological indicators at Community Area level. Each value summarises a neighbourhood rather than an individual rider. Indicators built from z-scored components are comparable across CAs. Table~\ref{tab:indicators} lists their roles; equations below define computation.
+
+\textit{(1) Transport Usage Index (TUI).}
+Monthly pickups per 1{,}000 residents; 2024 values use the within-area \textbf{median} (robust to skew; citywide skewness $\approx 3.2$):
+\begin{equation}
+    \mathrm{TUI}_{i,m} = \frac{\text{TNP pickups}_{i,m}}{\text{population}_{i,m}} \times 1000.
+\end{equation}
+Higher TUI means more pickups per resident at the origin. It measures usage intensity, not dependency: central pickups include commuters, tourists, and nightlife visitors who do not live in the origin CA.
+
+\textit{(2) SDVI and HSVI.}
+Chicago publishes hardship and income at CA level and CCVI as an external health-oriented vulnerability score. We build two composites from z-standardised inputs \cite{chicago_hardship,chicago_ccvi} so that regression can use a single socioeconomic control without double-counting correlated fields:
+\begin{align}
+    \mathrm{SDVI}_i &= \mathrm{mean}\bigl(z(\mathrm{Hardship}_i),\, z(-\mathrm{Income}_i)\bigr),\\
+    \mathrm{HSVI}_i &= \mathrm{mean}\bigl(z(\mathrm{Hardship}_i),\, z(\mathrm{CCVI}_i)\bigr).
+\end{align}
+HSVI is the baseline regressor ($r=0.96$ with SDVI; only one belongs in regression). CCVI is retained for descriptive comparisons.
+
+\textit{(3) Weighted TUI.}
+Income-normalised annual ridesourcing spend using area-specific median fares from the TNP API \cite{chicago_tnp}:
+\begin{equation}
+    \mathrm{Weighted\_TUI}_i = \frac{(\text{n\_trips}_{i,y} \times \text{median\_fare}_i) / \text{population}_{i,y}}{\text{per capita income}_i}.
+\end{equation}
+
+\textit{(4) Mean travel time to the Loop.}
+Mean \texttt{trip\_seconds} from trip-level records with dropoff in CA~32 (Loop), aggregated by pickup CA for 2024.
+
+\textit{(5) Transit Accessibility Index (TAI).}
+Per CA we z-score bus stops/km$^2$, rail stations/km$^2$, and weekday GTFS departures/km$^2$ \cite{cta_bus_stops,cta_rail_stations,gtfs_cta}, then average:
+\begin{equation}
+    \mathrm{TransitAccess}_i = \mathrm{mean}\bigl(z(\mathrm{Bus}_i),\, z(\mathrm{Rail}_i),\, z(\mathrm{Freq}_i)\bigr), \quad
+    \mathrm{TransitDeficit}_i = -z(\mathrm{TransitAccess}_i).
+\end{equation}
+The index combines physical infrastructure with scheduled service frequency, not stop counts alone.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Summary of indicators.}
+    \label{tab:indicators}
+    \small
+    \begin{tabular}{|l|c|p{5.5cm}|}
+        \hline
+        \textbf{Indicator} & \textbf{Built by us?} & \textbf{Role} \\
+        \hline
+        TUI & Yes & Usage intensity (median 2024) \\
+        SDVI / HSVI & Yes (CCVI external) & Socio-demographic vulnerability \\
+        Weighted TUI & Yes & Income-normalised financial burden \\
+        Loop travel time & Yes & Peripherality to employment core \\
+        TAI / transit deficit & Yes & CTA supply + GTFS frequency \\
+        \hline
+    \end{tabular}
+\end{table}
 
 \subsection{Analytical workflow}
 The end-to-end pipeline in \texttt{SmartCities\_RideSharing.ipynb} follows eight stages, implemented with reusable functions in \texttt{utils.py}:
